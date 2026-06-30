@@ -61,11 +61,23 @@ export default function TransactionList({ transactions, loading, onEdit, onDelet
         return (
           <div className="list-row" key={t.id}>
             <div className="desc-cell">
-              <span className="cat-dot" style={{ background: meta.color, flexShrink: 0 }} />
-              <span title={t.description}>{t.description}</span>
-              {t.installmentNum && (
-                <span className="installment-tag">({t.installmentNum}/{t.installmentTotal})</span>
-              )}
+              <div className="desc-title">
+                <span className="cat-dot" style={{ background: meta.color, flexShrink: 0 }} />
+                <span title={t.description} className="desc-text">{t.description}</span>
+                {t.installmentNum && (
+                  <span className="installment-tag">({t.installmentNum}/{t.installmentTotal})</span>
+                )}
+              </div>
+              <div className="desc-meta-dates">
+                <span className={`meta-due-date${isOverdue ? ' overdue' : ''}`}>
+                  <i className="ti ti-calendar" aria-hidden="true" style={{ marginRight: '3px' }}></i>
+                  Venc. {fmtDate(t.dueDate)}
+                </span>
+                <span className="meta-pay-date">
+                  <i className="ti ti-check" aria-hidden="true" style={{ marginRight: '3px' }}></i>
+                  Pag. {t.paymentDate ? fmtDate(t.paymentDate) : '—'}
+                </span>
+              </div>
             </div>
 
             <div className={`date-cell${isOverdue ? ' overdue' : ''}`}>
