@@ -6,6 +6,7 @@ import {
   doc, query, onSnapshot, orderBy, Timestamp
 } from 'firebase/firestore'
 import ImageCropper from './ImageCropper'
+import * as XLSX from 'xlsx'
 
 const PALETTE = [
   '#D85A30','#E8932A','#BA7517','#1D9E75','#0F6E56',
@@ -450,6 +451,98 @@ function UserSection() {
   )
 }
 
+function ImportSection() {
+  const [importing, setImporting] = useState(false)
+  const fileInputRef = useRef(null)
+
+  const handleImport = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setImporting(true)
+    const reader = new FileReader()
+    reader.onload = async (evt) => {
+      try {
+        const data = new Uint8Array(evt.target.result)
+        const workbook = XLSX.read(data, { type: 'array' })
+        const firstSheetName = workbook.SheetNames[0]
+        const worksheet = workbook.Sheets[firstSheetName]
+        const json = XLSX.utils.sheet_to_json(worksheet, { range: 1 })
+        
+        const promises = json.map(row => {
+          if (!row['Data'] || !row['Descrição']) return Promise.resolve()
+          
+          let jsDate
+          if (typeof row['Data'] === 'number') {
+            jsDate = new Date(Math.round((row['Data'] - 25569) * 86400 * 1000))
+          } else {
+            jsDate = new Date(row['Data'])
+          }
+
+          if (isNaN(jsDate.getTime())) return Promise.resolve()
+
+          const qtd = parseFloat(row['Qtd.'] || 1)
+          const valorUnit = parseFloat((row['Valor Unit.'] || row['Valor Total'] || 0).toString().replace(',', '.'))
+          const valorTotal = parseFloat((row['Valor Total'] || (qtd * valorUnit)).toString().replace(',', '.'))
+
+          const tx = {
+            account: 'construcao',
+            type: 'despesa',
+            category: 'Construção',
+            description: row['Descrição'].toString(),
+            qtd: qtd,
+            valorUnit: valorUnit,
+            value: valorTotal,
+            dueDate: Timestamp.fromDate(jsDate),
+            paymentDate: Timestamp.fromDate(jsDate),
+            status: 'pago',
+            installments: 1,
+            createdAt: Timestamp.now()
+          }
+          return addDoc(collection(db, 'transactions'), tx)
+        })
+
+        await Promise.all(promises)
+        alert('Dados importados com sucesso!')
+      } catch (err) {
+        alert('Erro ao importar: ' + err.message)
+      } finally {
+        setImporting(false)
+        if (fileInputRef.current) fileInputRef.current.value = ''
+      }
+    }
+    reader.readAsArrayBuffer(file)
+  }
+
+  return (
+    <div>
+      <div className="users-header">
+        <div className="users-title">Importar Dados da Planilha</div>
+      </div>
+      <div style={{ padding: '20px 0' }}>
+        <p style={{ marginBottom: 15, color: '#666' }}>
+          Selecione a planilha Excel (formato .xlsx) para importar os lançamentos para a aba de Construção.
+        </p>
+        <input 
+          type="file" 
+          accept=".xlsx, .xls" 
+          onChange={handleImport} 
+          ref={fileInputRef}
+          style={{ display: 'none' }} 
+        />
+        <button 
+          className="btn-sm primary" 
+          onClick={() => fileInputRef.current?.click()}
+          disabled={importing}
+          style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+        >
+          <i className={importing ? "ti ti-loader" : "ti ti-upload"} style={importing ? { animation: 'spin 1s linear infinite' } : {}} aria-hidden="true" />
+          {importing ? 'Importando...' : 'Selecionar Arquivo'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function SettingsModal({ onClose }) {
   const { expenseCategories, incomeCategories } = useCategories()
   const [tab, setTab] = useState('despesa')
@@ -489,6 +582,13 @@ export default function SettingsModal({ onClose }) {
             <i className="ti ti-users" aria-hidden="true" style={{ marginRight: 5 }} />
             Usuários
           </button>
+          <button
+            className={`settings-tab${tab === 'importar' ? ' active' : ''}`}
+            onClick={() => setTab('importar')}
+          >
+            <i className="ti ti-upload" aria-hidden="true" style={{ marginRight: 5 }} />
+            Importar
+          </button>
         </div>
 
         <div className="settings-body">
@@ -500,6 +600,9 @@ export default function SettingsModal({ onClose }) {
           )}
           {tab === 'usuarios' && (
             <UserSection />
+          )}
+          {tab === 'importar' && (
+            <ImportSection />
           )}
         </div>
       </div>

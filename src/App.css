@@ -215,11 +215,32 @@ body {
 .empty-state { padding: 2.5rem 1rem; text-align: center; color: #666; font-weight: 500; }
 .empty-state i { font-size: 36px; margin-bottom: .5rem; display: block; color: #aaa; }
 
+/* Construcao Custom Grid */
+.list-header.construcao { grid-template-columns: 1fr 3fr 1fr 1.5fr 1.5fr 80px; }
+.list-row.construcao { grid-template-columns: 1fr 3fr 1fr 1.5fr 1.5fr 80px; }
+.qtd-cell, .unit-cell { display: flex; align-items: center; }
+
 /* ── Mobile ── */
 @media (max-width: 640px) {
   .list-header { display: none; }
   .list-row { grid-template-columns: 1fr auto; grid-template-rows: auto auto; gap: 4px; padding: .875rem 1rem; }
   .list-row > .date-cell, .list-row > .payment-date { display: none; }
+
+  .list-row.construcao {
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      "desc value"
+      "desc actions";
+    align-items: start;
+  }
+  .list-row.construcao > .date-cell, 
+  .list-row.construcao > .qtd-cell, 
+  .list-row.construcao > .unit-cell { display: none; }
+  
+  .list-row.construcao > .desc-cell { grid-area: desc; }
+  .list-row.construcao > .value-cell { grid-area: value; justify-self: end; }
+  .list-row.construcao > .actions { grid-area: actions; justify-self: end; align-self: end; }
   
   .desc-meta-dates {
     display: flex;

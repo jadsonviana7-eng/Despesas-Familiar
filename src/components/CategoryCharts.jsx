@@ -21,7 +21,7 @@ function CategoryBar({ label, value, max, color }) {
   )
 }
 
-export default function CategoryCharts({ transactions }) {
+export default function CategoryCharts({ transactions, currentAccount }) {
   const { getCategoryMeta } = useCategories()
 
   const buildMap = (type) => {
@@ -39,6 +39,25 @@ export default function CategoryCharts({ transactions }) {
   const maxR = Math.max(...receitasCats.map(([, v]) => v), 1)
 
   if (despesasCats.length === 0 && receitasCats.length === 0) return null
+
+  if (currentAccount === 'construcao') {
+    return (
+      <div className="charts-row" style={{ gridTemplateColumns: '1fr' }}>
+        <div className="chart-card">
+          <div className="chart-title">Despesas por categoria</div>
+          <div className="bar-wrap">
+            {despesasCats.length === 0
+              ? <div style={{ color: '#777', fontSize: 13, fontWeight: 500 }}>Sem despesas neste período</div>
+              : despesasCats.map(([cat, val]) => (
+                <CategoryBar key={cat} label={cat} value={val} max={maxD}
+                  color={getCategoryMeta('despesa', cat).color} />
+              ))
+            }
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="charts-row">

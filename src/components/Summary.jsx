@@ -1,6 +1,6 @@
 const fmt = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })
 
-export default function Summary({ transactions }) {
+export default function Summary({ transactions, filteredTransactions, currentAccount, totalConstruction, activeFilter }) {
   const receitas = transactions.filter(t => t.type === 'receita')
   const despesas = transactions.filter(t => t.type === 'despesa')
 
@@ -15,6 +15,35 @@ export default function Summary({ transactions }) {
 
   const atrasados = transactions.filter(t => (t.computedStatus || t.status) === 'atrasado')
   const pagas = transactions.filter(t => t.status === 'pago')
+
+  if (currentAccount === 'construcao') {
+    const isFiltered = activeFilter && activeFilter !== 'all'
+    const dispTransactions = isFiltered ? filteredTransactions : transactions
+    const dispDespesas = dispTransactions.filter(t => t.type === 'despesa')
+    const dispTotal = dispDespesas.reduce((s, t) => s + (t.value || 0), 0)
+
+    return (
+      <div className="summary-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+        <div className="sum-card">
+          <div className="sum-label">
+            <i className="ti ti-calendar-event" style={{ color: '#378ADD' }} aria-hidden="true" />
+            {isFiltered ? `Total: ${activeFilter}` : 'Valor por período selecionado'}
+          </div>
+          <div className="sum-val red">R$ {fmt(dispTotal)}</div>
+          <div className="sum-sub">{dispDespesas.length} lançamento{dispDespesas.length !== 1 ? 's' : ''}</div>
+        </div>
+
+        <div className="sum-card">
+          <div className="sum-label">
+            <i className="ti ti-hammer" style={{ color: '#D85A30' }} aria-hidden="true" />
+            {isFiltered ? `Soma Global: ${activeFilter}` : 'Valor de despesas total'}
+          </div>
+          <div className="sum-val red">R$ {fmt(totalConstruction || 0)}</div>
+          <div className="sum-sub">{isFiltered ? `Gasto total com ${activeFilter}` : 'Soma global da obra'}</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="summary-grid">

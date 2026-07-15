@@ -1,6 +1,7 @@
 // src/CategoriesContext.jsx
-// Gerencia categorias em localStorage (sem depender do Firestore para agilidade)
 import { createContext, useContext, useState, useEffect } from 'react'
+import { db } from './firebase'
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc } from 'firebase/firestore'
 
 const DEFAULT_EXPENSE_CATEGORIES = [
   { id: 'moradia', name: 'Moradia', color: '#D85A30', icon: 'ti-home' },
@@ -37,27 +38,7 @@ const DEFAULT_CONST_INCOME_CATEGORIES = [
 const CategoriesContext = createContext(null)
 
 export function CategoriesProvider({ children }) {
-  const load = (key, def) => {
-    try {
-      const raw = localStorage.getItem(key)
-      return raw ? JSON.parse(raw) : def
-    } catch { return def }
-  }
-
-  // Estados separados para as duas contas
-  const [personalExpenseCats, setPersonalExpenseCats] = useState(() =>
-    load('fin_expense_cats', DEFAULT_EXPENSE_CATEGORIES)
-  )
-  const [personalIncomeCats, setPersonalIncomeCats] = useState(() =>
-    load('fin_income_cats', DEFAULT_INCOME_CATEGORIES)
-  )
-  const [constExpenseCats, setConstExpenseCats] = useState(() =>
-    load('fin_const_expense_cats', DEFAULT_CONST_EXPENSE_CATEGORIES)
-  )
-  const [constIncomeCats, setConstIncomeCats] = useState(() =>
-    load('fin_const_income_cats', DEFAULT_CONST_INCOME_CATEGORIES)
-  )
-
+  const [categories, setCategories] = useState([])
   const [currentAccount, setCurrentAccount] = useState(() =>
     localStorage.getItem('fin_current_account') || 'pessoal'
   )
@@ -67,58 +48,69 @@ export function CategoriesProvider({ children }) {
   }, [currentAccount])
 
   useEffect(() => {
-    localStorage.setItem('fin_expense_cats', JSON.stringify(personalExpenseCats))
-  }, [personalExpenseCats])
+    const unsub = onSnapshot(collection(db, 'categories'), snapshot => {
+      if (snapshot.empty) {
+        // Migrar do localStorage ou usar defaults na primeira vez
+        const loadLocal = (key, def) => {
+          try {
+            const raw = localStorage.getItem(key)
+            return raw ? JSON.parse(raw) : def
+          } catch { return def }
+        }
+        
+        const pExp = loadLocal('fin_expense_cats', DEFAULT_EXPENSE_CATEGORIES)
+        const pInc = loadLocal('fin_income_cats', DEFAULT_INCOME_CATEGORIES)
+        const cExp = loadLocal('fin_const_expense_cats', DEFAULT_CONST_EXPENSE_CATEGORIES)
+        const cInc = loadLocal('fin_const_income_cats', DEFAULT_CONST_INCOME_CATEGORIES)
 
-  useEffect(() => {
-    localStorage.setItem('fin_income_cats', JSON.stringify(personalIncomeCats))
-  }, [personalIncomeCats])
+        const batchSeed = (list, type, account) => {
+          list.forEach(c => {
+             const docId = c.id || Math.random().toString(36).substring(2, 9)
+             setDoc(doc(db, 'categories', `${account}_${type}_${docId}`), {
+               name: c.name, color: c.color, icon: c.icon, type, account
+             })
+          })
+        }
+        
+        batchSeed(pExp, 'despesa', 'pessoal')
+        batchSeed(pInc, 'receita', 'pessoal')
+        batchSeed(cExp, 'despesa', 'construcao')
+        batchSeed(cInc, 'receita', 'construcao')
+      } else {
+        setCategories(snapshot.docs.map(d => ({ id: d.id, ...d.data() })))
+      }
+    })
+    return () => unsub()
+  }, [])
 
-  useEffect(() => {
-    localStorage.setItem('fin_const_expense_cats', JSON.stringify(constExpenseCats))
-  }, [constExpenseCats])
+  const expenseCategories = categories.filter(c => c.type === 'despesa' && c.account === currentAccount)
+  const incomeCategories = categories.filter(c => c.type === 'receita' && c.account === currentAccount)
 
-  useEffect(() => {
-    localStorage.setItem('fin_const_income_cats', JSON.stringify(constIncomeCats))
-  }, [constIncomeCats])
-
-  // Resolve as categorias ativas dinamicamente
-  const expenseCategories = currentAccount === 'pessoal' ? personalExpenseCats : constExpenseCats
-  const incomeCategories = currentAccount === 'pessoal' ? personalIncomeCats : constIncomeCats
-
-  const addCategory = (type, cat) => {
-    const newCat = { ...cat, id: `cat_${Date.now()}` }
-    if (currentAccount === 'pessoal') {
-      if (type === 'despesa') setPersonalExpenseCats(prev => [...prev, newCat])
-      else setPersonalIncomeCats(prev => [...prev, newCat])
-    } else {
-      if (type === 'despesa') setConstExpenseCats(prev => [...prev, newCat])
-      else setConstIncomeCats(prev => [...prev, newCat])
-    }
+  const addCategory = async (type, cat) => {
+    await addDoc(collection(db, 'categories'), {
+      name: cat.name,
+      color: cat.color,
+      icon: cat.icon,
+      type,
+      account: currentAccount
+    })
   }
 
-  const updateCategory = (type, cat) => {
-    if (currentAccount === 'pessoal') {
-      if (type === 'despesa') setPersonalExpenseCats(prev => prev.map(c => c.id === cat.id ? cat : c))
-      else setPersonalIncomeCats(prev => prev.map(c => c.id === cat.id ? cat : c))
-    } else {
-      if (type === 'despesa') setConstExpenseCats(prev => prev.map(c => c.id === cat.id ? cat : c))
-      else setConstIncomeCats(prev => prev.map(c => c.id === cat.id ? cat : c))
-    }
+  const updateCategory = async (type, cat) => {
+    const { id, ...rest } = cat
+    await updateDoc(doc(db, 'categories', id), {
+      name: rest.name,
+      color: rest.color,
+      icon: rest.icon,
+    })
   }
 
-  const deleteCategory = (type, id) => {
-    if (currentAccount === 'pessoal') {
-      if (type === 'despesa') setPersonalExpenseCats(prev => prev.filter(c => c.id !== id))
-      else setPersonalIncomeCats(prev => prev.filter(c => c.id !== id))
-    } else {
-      if (type === 'despesa') setConstExpenseCats(prev => prev.filter(c => c.id !== id))
-      else setConstIncomeCats(prev => prev.filter(c => c.id !== id))
-    }
+  const deleteCategory = async (type, id) => {
+    await deleteDoc(doc(db, 'categories', id))
   }
 
   const getCategoryMeta = (type, name) => {
-    const list = type === 'receita' ? incomeCategories : expenseCategories
+    const list = categories.filter(c => c.type === type && c.account === currentAccount)
     return list.find(c => c.name === name) || { color: '#888780', icon: 'ti-dots' }
   }
 
